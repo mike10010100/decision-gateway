@@ -25,5 +25,6 @@ services:
       - GATEWAY_PORT=8000
       - OLLAYA_URL=http://127.0.0.1:11435
       - OLLAYA_MCP_URL=http://127.0.0.1:11436
+      - PRELOAD_MODELS=decider,laya,kev:4b
     depends_on:
       - ollaya

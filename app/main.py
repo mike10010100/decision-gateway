@@ -2,15 +2,21 @@
 Decision Gateway Main FastAPI Application
 Provides:
   - Pattern 1: MCP Server reverse-proxy & Tool definitions (/mcp, /v1/tools)
-  - Pattern 2: Capabilities & SLA Manifest API (/, /v1/capabilities, /v1/models)
+  - Pattern 2: Dynamic Capabilities & SLA Manifest API (/, /v1/capabilities, /v1/models)
   - Pattern 3: SLA-Driven Smart Gateway & Auto-Router (/v1/systemone, /v1/auto)
+  - Model Management & Automation:
+    - Auto-preloading of models on startup (via PRELOAD_MODELS)
+    - POST /v1/models/pull (Trigger model download)
+    - DELETE /v1/models/{model_name} (Remove model)
 """
 
 import time
+import asyncio
 import subprocess
 import httpx
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, Request, Response, HTTPException, status
+from pydantic import BaseModel, Field
+from fastapi import FastAPI, Request, Response, HTTPException, status, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,18 +25,22 @@ from app.config import (
     GATEWAY_PORT,
     OLLAYA_URL,
     OLLAYA_MCP_URL,
+    PRELOAD_MODELS,
     DEVICE_INFO
 )
-from app.capabilities import MODEL_CAPABILITIES, SLA_ROUTING_PROFILES
+from app.capabilities import (
+    MODEL_CAPABILITIES,
+    SLA_ROUTING_PROFILES,
+    get_live_models_capabilities
+)
 from app.router import resolve_model
 
 app = FastAPI(
     title="Decision Gateway",
     description="SLA-driven Gateway and Capabilities Manifest for System-One Decision Models",
-    version="1.0.0"
+    version="1.1.0"
 )
 
-# Enable CORS so any browser app or remote web client can call it
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,9 +68,37 @@ def ensure_upstream_mcp_running():
     except Exception as e:
         print(f"Warning: Could not start upstream MCP server: {e}")
 
+async def preload_models_background():
+    """Checks installed models against PRELOAD_MODELS and pulls any missing ones."""
+    await asyncio.sleep(2.0)  # Wait for upstream Ollaya to initialize
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{OLLAYA_URL}/api/tags")
+            installed_names = []
+            if resp.status_code == 200:
+                installed_names = [m.get("name", "") for m in resp.json().get("models", [])]
+
+        for model_to_preload in PRELOAD_MODELS:
+            # Check if model or model:latest is installed
+            is_present = any(
+                m == model_to_preload or m.startswith(f"{model_to_preload}:")
+                for m in installed_names
+            )
+            if not is_present:
+                print(f"Preloading model: '{model_to_preload}'...")
+                async with httpx.AsyncClient(timeout=600.0) as client:
+                    await client.post(
+                        f"{OLLAYA_URL}/api/pull",
+                        json={"model": model_to_preload}
+                    )
+                print(f"Preload completed for '{model_to_preload}'")
+    except Exception as e:
+        print(f"Notice: Preload check completed with note: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     ensure_upstream_mcp_running()
+    asyncio.create_task(preload_models_background())
 
 @app.get("/healthz")
 async def health_check():
@@ -74,14 +112,16 @@ async def health_check():
 @app.get("/v1/capabilities")
 async def get_capabilities():
     """
-    Returns the complete capability manifest advertising available models,
+    Returns the complete capability manifest advertising dynamically discovered models,
     benchmark performance (FPS, latency), reasoning tiers, and SLA routing rules.
     """
+    live_models = await get_live_models_capabilities(OLLAYA_URL)
     return {
         "service": "Decision Gateway",
         "device": DEVICE_INFO,
-        "models": MODEL_CAPABILITIES,
+        "models": live_models,
         "sla_profiles": SLA_ROUTING_PROFILES,
+        "preload_configuration": PRELOAD_MODELS,
         "recommendations": {
             "default_model": "decider",
             "fastest_model": "laya",
@@ -91,27 +131,94 @@ async def get_capabilities():
             "decide": "/v1/systemone (or /v1/auto)",
             "capabilities": "/v1/capabilities",
             "models": "/v1/models",
+            "pull_model": "/v1/models/pull",
+            "delete_model": "/v1/models/{model_name}",
             "mcp": "/mcp",
-            "tools": "/v1/tools"
+            "tools": "/v1/tools",
+            "docs": "/docs"
         }
     }
 
 @app.get("/v1/models")
 async def list_models():
     """TypeSafe / OpenAI compatible model list enriched with throughput & latency."""
+    live_models = await get_live_models_capabilities(OLLAYA_URL)
     models_list = []
-    for model_id, meta in MODEL_CAPABILITIES.items():
+    for model_id, meta in live_models.items():
         models_list.append({
             "id": model_id,
-            "name": meta["name"],
-            "description": meta["description"],
-            "parameter_size": meta["parameter_size"],
-            "latency_ms": meta["avg_latency_ms"],
-            "throughput_fps": meta["throughput_fps"],
-            "reasoning_tier": meta["reasoning_tier"],
+            "name": meta.get("name", model_id),
+            "description": meta.get("description", ""),
+            "parameter_size": meta.get("parameter_size", "unknown"),
+            "latency_ms": meta.get("avg_latency_ms", 1000),
+            "throughput_fps": meta.get("throughput_fps", 1.0),
+            "reasoning_tier": meta.get("reasoning_tier", "standard"),
+            "installed": meta.get("installed", True),
             "is_default": meta.get("is_default", False)
         })
     return {"object": "list", "data": models_list}
+
+# ---------------------------------------------------------------------------
+# Model Management & Automated Download Endpoints
+# ---------------------------------------------------------------------------
+
+class PullModelRequest(BaseModel):
+    model: str = Field(..., description="Name of the model to download (e.g. 'gliclass', 'qwen3guard', 'decider')")
+    stream: bool = Field(False, description="Stream the NDJSON download progress")
+
+@app.post("/v1/models/pull")
+async def pull_model(req: PullModelRequest):
+    """
+    Triggers automated download/pull of a decision model from the registry.
+    """
+    model_name = req.model.strip()
+    url = f"{OLLAYA_URL}/api/pull"
+
+    if req.stream:
+        # Stream the download progress back to caller
+        client = httpx.AsyncClient(timeout=900.0)
+        client_req = client.build_request("POST", url, json={"model": model_name})
+        upstream_resp = await client.send(client_req, stream=True)
+
+        async def stream_generator():
+            try:
+                async for chunk in upstream_resp.aiter_raw():
+                    yield chunk
+            finally:
+                await upstream_resp.aclose()
+                await client.aclose()
+
+        return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+    else:
+        # Synchronous/buffered wait
+        try:
+            async with httpx.AsyncClient(timeout=900.0) as client:
+                resp = await client.post(url, json={"model": model_name})
+                if resp.status_code == 200:
+                    return {
+                        "status": "success",
+                        "message": f"Model '{model_name}' downloaded successfully and ready for use.",
+                        "model": model_name
+                    }
+                else:
+                    return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to pull model: {exc}")
+
+@app.delete("/v1/models/{model_name}")
+async def delete_model(model_name: str):
+    """
+    Removes a downloaded model to free disk space on NVMe storage.
+    """
+    url = f"{OLLAYA_URL}/api/delete"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.request("DELETE", url, json={"model": model_name})
+            if resp.status_code == 200:
+                return {"status": "success", "message": f"Model '{model_name}' removed."}
+            return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to delete model: {exc}")
 
 # ---------------------------------------------------------------------------
 # Pattern 3: SLA-Driven Smart Gateway & Auto-Router
@@ -139,19 +246,16 @@ async def make_decision(request: Request):
             detail="'state' and 'questions' are required fields"
         )
 
-    # Extract routing parameters
     requested_model = body.get("model")
     requested_sla = body.get("sla")
     requested_max_latency = body.get("max_latency_ms")
 
-    # Resolve target model
     selected_model, routing_reason = resolve_model(
         model=requested_model,
         sla=requested_sla,
         max_latency_ms=requested_max_latency
     )
 
-    # Build upstream payload for Ollaya
     upstream_payload = {
         "model": selected_model,
         "state": state,
@@ -179,11 +283,9 @@ async def make_decision(request: Request):
 
     result_json = resp.json()
 
-    # Get model info for headers
     model_meta = MODEL_CAPABILITIES.get(selected_model, {})
     model_fps = model_meta.get("throughput_fps", 0)
 
-    # Enrich response with routing telemetry
     result_json["routing"] = {
         "selected_model": selected_model,
         "reason": routing_reason,

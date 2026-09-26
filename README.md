@@ -1,6 +1,8 @@
 # Decision Gateway
 
-A unified, SLA-driven API gateway and capabilities discovery service for **System-One Decision Models** (Kev, Decider, Laya), running locally with zero cloud cost.
+A unified, SLA-driven API gateway, dynamic capabilities discovery, and model management service for **System-One Decision Models** (Kev, Decider, Laya, GLiClass, Qwen3Guard, NLI), running locally with zero cloud cost.
+
+GitHub Repository: **[https://github.com/mike10010100/decision-gateway](https://github.com/mike10010100/decision-gateway)** (Public)
 
 ---
 
@@ -14,20 +16,29 @@ A unified, SLA-driven API gateway and capabilities discovery service for **Syste
                      │         (Port 8000 on localhost)          │
                      └─────────────────────┬─────────────────────┘
                                            │
-         ┌─────────────────────────────────┼─────────────────────────────────┐
-         │                                 │                                 │
-   Pattern 1 (MCP)              Pattern 2 (Capabilities)          Pattern 3 (Auto-Routing)
-  SSE / Streamable MCP             Live Model Manifest               SLA & Latency Budget
-  Tool definitions (/tools)        FPS / Latency Profiles            Smart Router (/auto)
-         │                                 │                                 │
-         └─────────────────────────────────┼─────────────────────────────────┘
+         ┌───────────────────┬─────────────┴─────────────┬───────────────────┐
+         │                   │                           │                   │
+   Pattern 1 (MCP)     Pattern 2 (Capabilities)    Pattern 3 (Auto)    Model Management
+  SSE Streamable MCP   Live Model Manifest         SLA & Latency       Pull/Delete APIs
+  Tool definitions     FPS & Latency Profiles      Smart Auto-Router   Auto-Preload
+         │                   │                           │                   │
+         └───────────────────┴─────────────┬─────────────┴───────────────────┘
                                            │
                      ┌─────────────────────┴─────────────────────┐
                      │          Ollaya Inference Server          │
-                     │   decider (0.60 FPS) │ laya (3.29 FPS)   │
-                     │   kev:4b (0.23 FPS)  │ kev (1.50 FPS)    │
+                     │  Port 11435 (REST) │ Port 11436 (MCP)     │
+                     │  NVMe Mounted Storage: /mnt/nvme/ollaya   │
                      └───────────────────────────────────────────┘
 ```
+
+---
+
+## Interactive Documentation & OpenAPI
+
+* **Swagger UI (Interactive API Explorer):** `http://<server-ip>:8000/docs` or `http://localhost:8000/docs`
+* **ReDoc (Reference Documentation):** `http://<server-ip>:8000/redoc` or `http://localhost:8000/redoc`
+* **Raw OpenAPI 3.1 Spec:** `http://<server-ip>:8000/openapi.json`
+* **Live Capabilities Manifest:** `http://<server-ip>:8000/v1/capabilities`
 
 ---
 
@@ -36,19 +47,64 @@ A unified, SLA-driven API gateway and capabilities discovery service for **Syste
 | Model | Parameters | VRAM | Avg Latency | Throughput (FPS) | Reasoning Tier & Best Use Case |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`decider`** *(default)* | 1.9B | 3.8 GB | **~1,670 ms** | **0.60 FPS** | **`deep_causal`**: High accuracy triage, customer frustration, implicit severity. |
-| **`laya`** | 421M | 850 MB | **~304 ms** | **3.29 FPS** | **`surface_keyword`**: High-throughput loops, spam/profanity, simple keyword routing. |
+| **`laya`** | 421M | 850 MB | **~304 ms** | **3.29 FPS** | **`surface_keyword`**: High-throughput edge loops, spam/profanity, simple keyword routing. |
+| **`gliclass`** | 300M | 650 MB | **~280 ms** | **3.57 FPS** | **`zero_shot_classification`**: High-throughput arbitrary taxonomy classification. |
+| **`nli`** | 400M | 880 MB | **~380 ms** | **2.63 FPS** | **`entailment_classification`**: Zero-shot premise/hypothesis testing. |
+| **`qwen3guard`** | 1.5B | 1.5 GB | **~950 ms** | **1.05 FPS** | **`safety_guardrail`**: Safety moderation, content policy guardrails. |
 | **`kev:4b`** | 4.0B | 9.5 GB | **~4,330 ms** | **0.23 FPS** | **`deep_pointer_head`**: Jared Palmer pointer-head span extraction workflows. |
 | **`kev`** *(0.8B)* | 0.76B | 1.8 GB | **~667 ms** | **1.50 FPS** | **`lightweight_pointer_head`**: Experimental pointer-head evaluation. |
+
+---
+
+## Quick Model Management & Automated Downloads
+
+### 1. Using the REST API (Any Remote Client)
+Download and install any model from the registry over HTTP:
+```bash
+# Pull a model (buffered)
+curl -s -X POST http://localhost:8000/v1/models/pull \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gliclass"}' | jq .
+
+# Pull a model with streaming NDJSON progress
+curl -N -X POST http://localhost:8000/v1/models/pull \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen3guard", "stream": true}'
+
+# Remove a model from NVMe storage
+curl -s -X DELETE http://localhost:8000/v1/models/gliclass | jq .
+```
+
+### 2. Using the CLI Helper Script (`./scripts/models.sh`)
+```bash
+# List all installed models and their live FPS ratings
+./scripts/models.sh list
+
+# Pull a new model
+./scripts/models.sh pull gliclass
+
+# Delete a model
+./scripts/models.sh rm gliclass
+
+# Run a quick test decision
+./scripts/models.sh test decider
+```
+
+### 3. Startup Automated Preloading
+In `docker-compose.yml`, configure the `PRELOAD_MODELS` environment variable:
+```yaml
+environment:
+  - PRELOAD_MODELS=decider,laya,kev:4b,gliclass
+```
+On boot, the gateway inspects installed models and automatically downloads any missing entries in the background.
 
 ---
 
 ## Pattern 1: For Remote AI Agents (MCP & Tool Specs)
 
 ### 1. Model Context Protocol (MCP)
-Remote agents (Claude, Cursor, LangChain, AutoGen) can connect directly to the streamable SSE endpoint:
+Remote agents (Claude Desktop, Cursor, LangChain, AutoGen) can connect directly to the streamable SSE endpoint:
 ```text
-http://<server-ip>:8000/mcp
-# or via mDNS:
 http://localhost:8000/mcp
 ```
 
@@ -62,8 +118,7 @@ curl http://localhost:8000/v1/tools | jq .
 
 ## Pattern 2: Capabilities & SLA Manifest API
 
-Remote microservices can inspect available models and hardware benchmarks on startup to automatically calibrate their requests:
-
+Remote microservices can inspect available models and hardware benchmarks on startup:
 ```bash
 # Full manifest with hardware stats, benchmarks, and routing rules:
 curl http://localhost:8000/v1/capabilities | jq .
@@ -76,7 +131,7 @@ curl http://localhost:8000/v1/models | jq .
 
 ## Pattern 3: SLA-Driven Auto-Router
 
-Remote callers do not need to hardcode model names; they can declare an **SLA profile** or **latency budget**:
+Remote callers declare an **SLA profile** or **latency budget**:
 
 ### 1. Smart Triage (Default / `sla: "smart"`)
 Routes to **`decider`** for high accuracy and context awareness:
@@ -119,25 +174,21 @@ curl -s -X POST http://localhost:8000/v1/auto \
   }' | jq .
 ```
 
-### 3. Latency Budget Routing (`max_latency_ms`)
-If `max_latency_ms <= 500`, the gateway automatically selects `laya`; otherwise it selects `decider`.
-
-### 4. Telemetry Headers Returned
-Every response returns telemetry headers for client logging:
-* `X-Selected-Model`: `decider`
-* `X-Execution-Time-Ms`: `1648.5`
-* `X-Rated-FPS`: `0.60`
-
 ---
 
-## Running the Service
+## Docker Compose Management
 
-### Start the Gateway:
-```bash
-./run.sh
-```
+The whole stack auto-starts on boot with `restart: unless-stopped`.
 
-### Run Tests:
 ```bash
-python3 -m unittest discover -s tests -p "test_*.py" -v
+cd ~/decision-gateway
+
+# Check container status
+docker compose ps
+
+# View live logs
+docker compose logs -f
+
+# Rebuild and restart
+docker compose up -d --build
 ```

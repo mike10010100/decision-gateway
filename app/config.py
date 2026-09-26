@@ -8,6 +8,11 @@ GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8000"))
 OLLAYA_URL = os.getenv("OLLAYA_URL", "http://127.0.0.1:11435")
 OLLAYA_MCP_URL = os.getenv("OLLAYA_MCP_URL", "http://127.0.0.1:11436")
 
+# Automated Startup Preload Models (comma-separated)
+PRELOAD_MODELS = [
+    m.strip() for m in os.getenv("PRELOAD_MODELS", "decider,laya,kev:4b").split(",") if m.strip()
+]
+
 # Hardware Description
 DEVICE_INFO = {
     "name": os.getenv("DEVICE_NAME", "Accelerated Compute Host 64GB"),

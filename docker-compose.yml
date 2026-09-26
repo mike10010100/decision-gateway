@@ -1,0 +1,29 @@
+services:
+  ollaya:
+    image: ghcr.io/ollaya-dev/ollaya:latest
+    container_name: ollaya
+    restart: unless-stopped
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - OLLAYA_HOST=127.0.0.1:11435
+    volumes:
+      - /mnt/nvme/ollaya/models:/home/ollaya/.ollaya/models
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollaya mcp --http 127.0.0.1:11436 & exec ollaya serve"]
+
+  gateway:
+    image: decision-gateway:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: decision-gateway
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+      - OLLAYA_URL=http://127.0.0.1:11435
+      - OLLAYA_MCP_URL=http://127.0.0.1:11436
+    depends_on:
+      - ollaya

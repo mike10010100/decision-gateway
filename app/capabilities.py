@@ -123,9 +123,48 @@ MODEL_CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "best_for": ["Zero-shot topic classification"],
         "is_default": False,
     },
+    "julia": {
+        "name": "julia:latest",
+        "alias": "julia",
+        "description": (
+            "Multilingual compact decision model based on mmBERT-small (144M params) "
+            "by Supersonic Labs."
+        ),
+        "parameter_size": "144M",
+        "vram_footprint_mb": 380,
+        "avg_latency_ms": 100,
+        "throughput_fps": 10.0,
+        "reasoning_tier": "multilingual_compact_decision",
+        "decision_quality": (
+            "High on explicit context (86% DAIR Emotion, 94% AG News, 73.2% Typed Decisions), "
+            "but degrades on large candidate shortlists (>20 options, 64% Banking77)."
+        ),
+        "best_for": [
+            "Ultra-low latency edge decision loops (>10 FPS)",
+            "Multilingual classification across 52 locales (MASSIVE)",
+            "Sentiment, emotion, and quick intent routing",
+            "Resource-constrained CPU or browser WebGPU deployment",
+        ],
+        "is_default": False,
+    },
 }
 
 SLA_ROUTING_PROFILES: Dict[str, Dict[str, Any]] = {
+    "ultrafast": {
+        "target_model": "julia",
+        "description": (
+            "Ultra-low latency (<150ms, ~10 FPS) and minimal memory (~380MB) for "
+            "lightweight edge decisions."
+        ),
+        "max_latency_budget_ms": 150,
+    },
+    "multilingual": {
+        "target_model": "julia",
+        "description": (
+            "Multilingual decision profile across 52 locales based on mmBERT-small foundation."
+        ),
+        "max_latency_budget_ms": 200,
+    },
     "fast": {
         "target_model": "laya",
         "description": (

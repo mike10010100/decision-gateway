@@ -97,6 +97,8 @@ class TestRouterResolutionPaths:
     @pytest.mark.parametrize(
         "sla_name,expected_model",
         [
+            ("ultrafast", "julia"),
+            ("multilingual", "julia"),
             ("fast", "laya"),
             ("cost", "laya"),
             ("smart", "decider"),

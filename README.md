@@ -1,6 +1,6 @@
 # Decision Gateway
 
-A unified, SLA-driven API gateway, dynamic capabilities discovery, and model management service for **System-One Decision Models** (Kev, Decider, Laya, GLiClass, Qwen3Guard, NLI), running locally with zero cloud cost.
+A unified, SLA-driven API gateway, dynamic capabilities discovery, and model management service for **System-One Decision Models** (Julia, Decider, Laya, Kev, GLiClass, Qwen3Guard, NLI), running locally with zero cloud cost.
 
 GitHub Repository: **[https://github.com/mike10010100/decision-gateway](https://github.com/mike10010100/decision-gateway)** (Public)
 
@@ -46,6 +46,7 @@ GitHub Repository: **[https://github.com/mike10010100/decision-gateway](https://
 
 | Model | Parameters | VRAM | Avg Latency | Throughput (FPS) | Reasoning Tier & Best Use Case |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`julia`** | 144M | 380 MB | **~100 ms** | **10.0 FPS** | **`multilingual_compact`**: Ultra-fast edge loops, 52-locale classification, emotion/sentiment routing. |
 | **`decider`** *(default)* | 1.9B | 3.8 GB | **~1,670 ms** | **0.60 FPS** | **`deep_causal`**: High accuracy triage, customer frustration, implicit severity. |
 | **`laya`** | 421M | 850 MB | **~304 ms** | **3.29 FPS** | **`surface_keyword`**: High-throughput edge loops, spam/profanity, simple keyword routing. |
 | **`gliclass`** | 300M | 650 MB | **~280 ms** | **3.57 FPS** | **`zero_shot_classification`**: High-throughput arbitrary taxonomy classification. |
@@ -169,6 +170,27 @@ curl -s -X POST http://localhost:8000/v1/auto \
       "is_spam": {
         "type": "noul",
         "criteria": {"yes": "Promotional or scam spam", "no": "Legitimate communication"}
+      }
+    }
+  }' | jq .
+```
+
+### 3. Ultra-Fast Multilingual Edge Routing (`sla: "ultrafast"`)
+Routes to **`julia`** for sub-150ms execution (~10 FPS) across 52 languages:
+```bash
+curl -s -X POST http://localhost:8000/v1/auto \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sla": "ultrafast",
+    "state": "Eu gostaria de alterar a data do meu voo para amanhã cedo.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "criteria": {
+          "flights": "Reservas e alterações de voos",
+          "luggage": "Bagagem extraviada",
+          "support": "Atendimento geral"
+        }
       }
     }
   }' | jq .

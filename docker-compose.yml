@@ -8,7 +8,7 @@ services:
     environment:
       - OLLAYA_HOST=127.0.0.1:11435
     volumes:
-      - /mnt/nvme/ollaya/models:/home/ollaya/.ollaya/models
+      - ${MODELS_PATH:-./data/models}:/home/ollaya/.ollaya/models
     entrypoint: ["/bin/sh", "-c"]
     command: ["ollaya mcp --http 127.0.0.1:11436 & exec ollaya serve"]
 

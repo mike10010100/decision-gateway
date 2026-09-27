@@ -332,7 +332,7 @@ async def pull_model(req: PullModelRequest, request: Request):
 @app.delete("/v1/models/{model_name}")
 async def delete_model(model_name: str):
     """
-    Removes a downloaded model to free disk space on NVMe storage.
+    Removes a downloaded model to free disk space on local storage.
     """
     url = f"{OLLAYA_URL}/api/delete"
     try:

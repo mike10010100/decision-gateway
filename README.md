@@ -27,7 +27,7 @@ GitHub Repository: **[https://github.com/mike10010100/decision-gateway](https://
                      ┌─────────────────────┴─────────────────────┐
                      │          Ollaya Inference Server          │
                      │  Port 11435 (REST) │ Port 11436 (MCP)     │
-                     │  NVMe Mounted Storage: /mnt/nvme/ollaya   │
+                     │  Model Storage: ${MODELS_PATH:-./data/models} │
                      └───────────────────────────────────────────┘
 ```
 
@@ -71,7 +71,7 @@ curl -N -X POST http://localhost:8000/v1/models/pull \
   -H "Content-Type: application/json" \
   -d '{"model": "qwen3guard", "stream": true}'
 
-# Remove a model from NVMe storage
+# Remove a model from local storage
 curl -s -X DELETE http://localhost:8000/v1/models/gliclass | jq .
 ```
 

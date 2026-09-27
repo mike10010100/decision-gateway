@@ -16,10 +16,10 @@ PRELOAD_MODELS = [
 # Hardware Description
 DEVICE_INFO = {
     "name": os.getenv("DEVICE_NAME", "Accelerated Compute Host 64GB"),
-    "architecture": os.getenv("DEVICE_ARCH", "aarch64 (ARM Cortex 12-core)"),
-    "gpu": os.getenv("DEVICE_GPU", "NVIDIA GPU (Ampere architecture, Compute Capability 8.7)"),
+    "architecture": os.getenv("DEVICE_ARCH", "64-bit Accelerated Architecture"),
+    "gpu": os.getenv("DEVICE_GPU", "NVIDIA GPU (Ampere architecture)"),
     "memory_total_gb": int(os.getenv("DEVICE_MEMORY_GB", "64")),
-    "memory_type": os.getenv("DEVICE_MEMORY_TYPE", "Unified LPDDR5"),
+    "memory_type": os.getenv("DEVICE_MEMORY_TYPE", "Unified System Memory"),
     "cuda_version": os.getenv("DEVICE_CUDA_VERSION", "12.6"),
     "network_hostname": os.getenv("DEVICE_HOSTNAME", "localhost"),
 }

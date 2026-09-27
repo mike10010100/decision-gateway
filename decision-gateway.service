@@ -5,8 +5,8 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=mike10010100
-WorkingDirectory=/home/mike10010100/decision-gateway
+User=appuser
+WorkingDirectory=/opt/decision-gateway
 ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5

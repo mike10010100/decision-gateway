@@ -8,3 +8,4 @@ htmlcov/
 *.log
 venv/
 .env
+.agents/

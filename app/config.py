@@ -21,5 +21,5 @@ DEVICE_INFO = {
     "memory_total_gb": int(os.getenv("DEVICE_MEMORY_GB", "64")),
     "memory_type": os.getenv("DEVICE_MEMORY_TYPE", "Unified LPDDR5"),
     "cuda_version": os.getenv("DEVICE_CUDA_VERSION", "12.6"),
-    "network_hostname": os.getenv("DEVICE_HOSTNAME", "localhost")
+    "network_hostname": os.getenv("DEVICE_HOSTNAME", "localhost"),
 }

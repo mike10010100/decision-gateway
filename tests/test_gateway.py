@@ -16,9 +16,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.main import app
 from app.router import resolve_model
-from app.capabilities import MODEL_CAPABILITIES, SLA_ROUTING_PROFILES
 
 client = TestClient(app)
+
 
 class TestRouterLogic(unittest.TestCase):
     def test_default_resolution(self):
@@ -45,6 +45,7 @@ class TestRouterLogic(unittest.TestCase):
     def test_explicit_model_override(self):
         model, _ = resolve_model(model="kev:4b", sla="fast")
         self.assertEqual(model, "kev:4b")
+
 
 class TestCapabilitiesAPI(unittest.TestCase):
     def test_healthz(self):
@@ -79,6 +80,7 @@ class TestCapabilitiesAPI(unittest.TestCase):
         self.assertIn("tools", data)
         self.assertEqual(data["tools"][0]["function"]["name"], "system_one_decision")
 
+
 class TestEndToEndDecisionRouting(unittest.TestCase):
     def test_auto_routing_default(self):
         payload = {
@@ -86,9 +88,9 @@ class TestEndToEndDecisionRouting(unittest.TestCase):
             "questions": {
                 "intent": {
                     "type": "choice",
-                    "criteria": {"email_issue": "Email delivery failure", "auth": "Login failure"}
+                    "criteria": {"email_issue": "Email delivery failure", "auth": "Login failure"},
                 }
-            }
+            },
         }
         resp = client.post("/v1/systemone", json=payload)
         self.assertEqual(resp.status_code, 200)
@@ -105,15 +107,16 @@ class TestEndToEndDecisionRouting(unittest.TestCase):
             "questions": {
                 "intent": {
                     "type": "choice",
-                    "criteria": {"email_issue": "Email delivery failure", "auth": "Login failure"}
+                    "criteria": {"email_issue": "Email delivery failure", "auth": "Login failure"},
                 }
-            }
+            },
         }
         resp = client.post("/v1/auto", json=payload)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.headers["x-selected-model"], "laya")
         data = resp.json()
         self.assertEqual(data["routing"]["selected_model"], "laya")
+
 
 if __name__ == "__main__":
     unittest.main()

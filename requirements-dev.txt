@@ -1,5 +1,5 @@
 pytest>=9.2.0
-pytest-asyncio>=1.4.0
+pytest-asyncio>=1.4.1.post1
 respx>=0.23.1
 flake8>=7.4.1
 black>=26.10.1
